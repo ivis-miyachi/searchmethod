@@ -1,0 +1,29 @@
+編集
+    間違えたメソッドに紐づけたとか
+    誤字があったとか
+    そういう時にdbからやるのは面倒
+
+継承に対応
+
+
+class A:
+    def A1
+    def A2
+    def A3
+
+class B(A)
+    def B1
+    def A2:
+        super(B).A2
+    def B3
+
+B.B2
+B.A3
+
+
+class_tableに継承カラム追加（class_idを入れる）
+method_tableにsuper追加(super=Trueだとそのクラスにはないが継承元にはあるという意味)
+
+検索時、B.A3(A)みたいにする
+B2内でsuper.A2としていた場合は
+B.B2-> A.A2(super)とする
