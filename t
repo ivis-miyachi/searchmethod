@@ -1,2 +1,2 @@
 #!/bin/bash
-docker compose exec web python ./src/cli.py "$@"
+docker compose exec app python ./src/cli.py "$@"

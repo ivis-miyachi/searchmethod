@@ -1,10 +1,12 @@
 
-from models import CallMethodTable, InheritTable, SignalCallTable
+from models import CallMethodTable, InheritTable, SignalCallTable, ClassTable, MethodTable, MethodArgumentClassMap,FileTable
 from classes import get_class
-from method import get_method, get_signal
-from utils import get_names_from_path
+from method import get_method, get_signal, search_method
+from file import get_file
+from utils import get_names_from_path, get_names_from_unstable_path
 
-def add_call(caller_path, callee_path, super_class_path=None, argument_method=None, is_async=0):
+def add_call(caller_path, callee_path, super_class_path=None, argument_method=None, 
+             is_async=0, is_recursion=0, is_callee_end=False, is_decorator=0, is_signal=0):
     """
     メソッド呼び出し関係を追加
     super(A).xxxのような呼び出しの場合、super_class_pathで親クラスのパスを指定する
@@ -50,17 +52,26 @@ def add_call(caller_path, callee_path, super_class_path=None, argument_method=No
     if not caller_id or not callee_id:
         print(f"Method not found, caller: {caller_id}, callee: {callee_id}")
         return
-
-    old = CallMethodTable.get(caller_id, callee_id, is_super=is_super)
-    if old:
-        print(f"Call already exists: caller_id={caller_id}, callee_id={callee_id}, is_super={is_super}")
+    only_argument_method = False
+    old = CallMethodTable.get(caller_id, callee_id, is_super=is_super, is_recursion=is_recursion)
+    if old and not argument_method:
+        print(f"Call already exists: caller_id={caller_id}, callee_id={callee_id}, is_super={is_super}, is_recursion={is_recursion}")
         return
-    if argument_method:
+    elif argument_method:
         argument_method,_ = get_method(*get_names_from_path(argument_method), with_class_obj=False, with_add=False)
         if not argument_method:
             print("Argument method not found")
             return
-    c = CallMethodTable.create(caller_id=caller_id, callee_id=callee_id, is_super=is_super, argument_method=argument_method, is_async=is_async)
+        only_argument_method = True if old else False
+    
+    c = CallMethodTable.create(caller_id=caller_id, callee_id=callee_id, 
+                               is_super=is_super, argument_method=argument_method, 
+                               is_async=is_async, is_recursion=is_recursion, 
+                               is_decorator=is_decorator,
+                               only_argument_method=only_argument_method,
+                               is_signal=is_signal)
+    if is_callee_end:
+        callee_method.set_is_trace_end(1)
 
 def change_caller(caller_path, callee_path, new_caller_path):
     caller_file, caller_class_name, caller_method_name = get_names_from_path(caller_path)
@@ -135,3 +146,46 @@ def add_call_signal(caller_path, callee_signal_path):
         print(f"Signal Call already exists: caller_id={caller_id}, callee_signal_id={callee_signal_id}")
         return
     c = SignalCallTable.create(caller_id, callee_signal_id)
+
+
+def search_call(path, is_caller=False, is_callee=False):
+    methods = search_method(path)
+    if len(methods) == 0:
+        print("No methods found")
+        return {}
+    result = {}
+    for m in methods:
+        result[m.str_with_id()] = {}
+        if is_caller:
+            result[m.str_with_id()]["caller"] = CallMethodTable.get_all_by_caller(m.id)
+        if is_callee:
+            result[m.str_with_id()]["callee"] = CallMethodTable.get_all_by_callee(m.id)
+    
+    return result
+
+
+def get_arguments(path):
+    file_name ,class_name, method_name = get_names_from_unstable_path(path)
+    
+    method, method_id = get_method(file_name, class_name, method_name, with_class_obj=False, with_add=False)
+    if not method:
+        print("Method not found")
+        return []
+    result = {}
+    calls = CallMethodTable.get_all_by_caller(method_id)
+    for call in calls:
+        if not call.is_change_by_caller:
+            continue
+        method_maps = MethodArgumentClassMap.get_by_call(call.id)
+        for map in method_maps:
+            caller_method = MethodTable.get_by_id(map.caller_method_id)
+            caller_path = str(caller_method)
+            
+            class_map_id = map.argument_class_id
+            file_map_id = map.argument_file_id
+            class_map = ClassTable.get_by_id(class_map_id)
+            file_map = FileTable.get_by_id(file_map_id)
+            callee, _ = get_method(file_map.path,class_map,call.callee.method_name,with_add=False)
+            callee_path = str(callee)
+            result[caller_path] = callee_path
+    return result

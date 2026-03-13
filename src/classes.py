@@ -1,5 +1,10 @@
+from sqlalchemy.orm import Session
+
+
 from models import ClassTable, InheritTable, MethodTable
 from file import get_file
+from utils import get_names_from_path
+
 def get_class(file, class_name, with_add=True):
     """クラスnameとfileからクラスid, nameを取得。なければ作成
 
@@ -19,8 +24,7 @@ def get_class(file, class_name, with_add=True):
 
 def add_class(path=None):
     if path:
-        file = path.split(":")[0]
-        class_name = path.split(":")[1]
+        file, class_name, _ = get_names_from_path(path,only_class=True)
     old = ClassTable.get(class_name, file)
     if old:
         print("Class already exists")
@@ -32,8 +36,8 @@ def get_all_classes():
     return ClassTable.get_all()
 
 def add_inherit(super_class_path, sub_class_path):
-    sub_file, sub_class_name = sub_class_path.split(":")
-    super_file, super_class_name = super_class_path.split(":")
+    sub_file, sub_class_name, _ = get_names_from_path(sub_class_path,only_class=True)
+    super_file, super_class_name, _ = get_names_from_path(super_class_path,only_class=True)
     if "." in sub_class_name or "." in super_class_name:
         print("Inherit can only be added between classes, not methods")
         return None
@@ -48,9 +52,21 @@ def add_inherit(super_class_path, sub_class_path):
     print(f"Inherit added: id= {inh.id}, path={str(sub_class_obj)} -> {str(super_class_obj)}")
     return inh
 
+def get_inherit(path,type="parent"):
+    file, class_name, _ = get_names_from_path(path,only_class=True)
+    class_obj, class_id = get_class(file, class_name, with_add=False)
+    if not class_obj:
+        print("Class not found")
+        return None
+    if type=="parent":
+        inhs = InheritTable.get_descendants_tree_parent(class_id)
+    else:
+        inhs = InheritTable.get_descendants_tree_child(class_id)
+    return inhs
+
 def delete_class(path):
     from models import InheritTable
-    file, class_name = path.split(":")
+    file, class_name, _ = get_names_from_path(path,only_class=True)
     class_obj, class_id = get_class(file, class_name, with_add=False)
     if not class_obj:
         print("Class not found")
@@ -70,8 +86,8 @@ def delete_class(path):
     
 def update_class(before_path, after_path):
     from models import ClassTable
-    before_file, before_class_name = before_path.split(":")
-    after_file, after_class_name = after_path.split(":")
+    before_file, before_class_name, _ = get_names_from_path(before_path,only_class=True)
+    after_file, after_class_name, _ = get_names_from_path(after_path,only_class=True)
     
     before_class_obj, before_class_id = get_class(before_file, before_class_name, with_add=False)
     before_file, before_file_id = get_file(before_file, with_add=False)
@@ -104,3 +120,4 @@ def update_class(before_path, after_path):
                 before_file.delete()
         
         before_class_obj.update(after_class_name, new_file_id)
+
